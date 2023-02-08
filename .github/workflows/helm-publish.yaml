@@ -1,7 +1,6 @@
 name: helm-publish
 on:
   push:
-    branches: ["main"]
     tags: "v*"
 
 jobs:
