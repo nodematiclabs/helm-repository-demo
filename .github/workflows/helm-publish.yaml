@@ -1,0 +1,41 @@
+name: helm-publish
+on:
+  push:
+    branches: ["main"]
+    tags: "v*"
+
+jobs:
+  release-chart:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install gcloud cli
+      uses: google-github-actions/setup-gcloud@v0
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+    - name: Install Helm
+      run: |
+        alias helm="docker run -ti --rm -v $(pwd):/apps -v ~/.kube:/root/.kube -v ~/.helm:/root/.helm alpine/helm:3.10.2"
+    - name: Lint with Helm
+      run: |
+        helm lint
+    - name: Package with Helm
+      run: |
+        helm package .
+    - name: Publish Helm package
+      run: |
+        gsutil cp *.tgz gs://charts.nodematic.io
+    - name: Generate Index file
+      run: |
+        export GCSFUSE_REPO=gcsfuse-`lsb_release -c -s`
+        echo "deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+        sudo apt-get update
+        sudo apt-get install gcsfuse
+        mkdir ./gcsfuse
+        gcsfuse charts.nodematic.io ./gcsfuse
+        cd ./gcsfuse
+        helm repo index .
+        gsutil cp index.yaml gs://charts.nodematic.io/
